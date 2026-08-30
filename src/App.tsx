@@ -6,6 +6,7 @@ import { clearDraft, loadDraft, loadScreen, saveDraft, saveScreen, type AppScree
 import { deleteImage, draftImageId, getImage, saveImage } from './storage/imageStorage'
 import { loadWords, saveWords, type StoredWord } from './storage/wordStorage'
 import { compressImage } from './utils/imageCompression'
+import { PwaControls } from './PwaControls'
 
 const languages: Language[] = ['ru', 'en', 'de']
 
@@ -187,6 +188,7 @@ function App() {
       <section className="words-section" aria-labelledby="words-heading"><div className="section-heading"><div><p className="section-heading__kicker">{copy.collection}</p><h2 id="words-heading">{copy.recentWords}</h2></div><span className="section-heading__count">{totalWords}</span></div><div className="word-grid">{demoWords.map((word) => <WordCard key={word.hanzi} {...word} translation={word.translations[language]}/>)}{storedWords.map((word) => <WordCard key={word.id} {...word} translation={word.translation}/>)}</div></section>
     </main>}
     <footer><span lang="zh">每天进步一点点</span><span>{copy.footer}</span></footer>
+    <PwaControls language={language}/>
   </div>
 }
 

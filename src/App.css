@@ -78,6 +78,14 @@ footer [lang='zh'] { color: var(--ink); font-family: var(--hanzi-font); font-siz
 .form-actions { display: grid; gap: 10px; padding-top: 4px; }
 .button:disabled { cursor: wait; opacity: .65; transform: none; }
 button:focus-visible, a:focus-visible { outline: 3px solid rgb(206 62 51 / 30%); outline-offset: 3px; }
+.pwa-controls { position: fixed; z-index: 20; right: 16px; bottom: max(16px, env(safe-area-inset-bottom)); display: flex; max-width: calc(100vw - 32px); justify-content: flex-end; }
+.install-button, .update-prompt { border: 1px solid var(--line); border-radius: 14px; color: var(--ink); background: var(--paper); box-shadow: 0 12px 36px rgb(69 47 38 / 18%); }
+.install-button { min-height: 42px; padding: 10px 14px; font-size: 13px; font-weight: 750; cursor: pointer; }
+.update-prompt { width: min(340px, calc(100vw - 32px)); padding: 14px; }
+.update-prompt p { margin: 0 0 12px; font-size: 14px; font-weight: 750; }
+.update-prompt__actions { display: flex; justify-content: flex-end; gap: 8px; }
+.update-prompt__actions button { min-height: 38px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: var(--canvas); font-size: 12px; font-weight: 750; cursor: pointer; }
+.update-prompt__actions .update-prompt__primary { border-color: var(--red); color: white; background: var(--red); }
 @media (min-width: 560px) { .app-shell { padding: 0 32px; } .brand__name { display: inline; } .actions { grid-template-columns: repeat(2, minmax(0, 210px)); } .word-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .word-form { padding: 34px; } .form-actions { grid-template-columns: repeat(2, minmax(0, 190px)); } }
 @media (min-width: 820px) { .app-header { min-height: 88px; } .hero-section { padding: 78px 0 72px; } .hero-section__subtitle { font-size: 18px; } .words-section { padding: 50px 0 80px; } .word-card { min-height: 230px; padding: 34px; } .word-card__media { top: 28px; right: 28px; width: 90px; height: 90px; border-radius: 21px; } .word-card__emoji { font-size: 45px; } .word-card--with-media .word-card__content { padding-right: 108px; } .word-card__hanzi { font-size: 76px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; } }
