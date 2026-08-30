@@ -2,6 +2,8 @@ const databaseName = 'hanzi-cards-images'
 const storeName = 'images'
 const databaseVersion = 1
 
+export const draftImageId = 'draft-image'
+
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(databaseName, databaseVersion)
