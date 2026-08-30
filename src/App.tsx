@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent 
 import './App.css'
 import { translations, type Language } from './data/translations'
 import { demoWords } from './data/words'
-import { deleteImage, getImage, saveImage } from './storage/imageStorage'
+import { clearDraft, loadDraft, loadScreen, saveDraft, saveScreen, type AppScreen } from './storage/draftStorage'
+import { deleteImage, draftImageId, getImage, saveImage } from './storage/imageStorage'
 import { loadWords, saveWords, type StoredWord } from './storage/wordStorage'
 import { compressImage } from './utils/imageCompression'
 
@@ -45,18 +46,29 @@ function WordCard({ hanzi, pinyin, translation, emoji, imageId }: WordCardProps)
 }
 
 type SaveResult = 'success' | 'image-error' | 'word-error'
-interface AddWordFormProps { language: Language; onCancel: () => void; onSave: (word: StoredWord, image?: Blob) => Promise<SaveResult> }
+interface AddWordFormProps { language: Language; onBack: () => void; onCancel: () => void; onSave: (word: StoredWord, image?: Blob) => Promise<SaveResult> }
 
-function AddWordForm({ language, onCancel, onSave }: AddWordFormProps) {
+function AddWordForm({ language, onBack, onCancel, onSave }: AddWordFormProps) {
   const copy = translations[language]
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [values, setValues] = useState({ hanzi: '', pinyin: '', translation: '', emoji: '' })
+  const imageChangedRef = useRef(false)
+  const [values, setValues] = useState(() => loadDraft() ?? { hanzi: '', pinyin: '', translation: '', emoji: '' })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [image, setImage] = useState<Blob>()
   const [imageError, setImageError] = useState('')
   const [isProcessingImage, setIsProcessingImage] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const previewUrl = useObjectUrl(image)
+
+  useEffect(() => { saveDraft(values) }, [values])
+
+  useEffect(() => {
+    let active = true
+    getImage(draftImageId)
+      .then((storedImage) => { if (active && !imageChangedRef.current) setImage(storedImage) })
+      .catch(() => { /* A missing draft image does not block the form. */ })
+    return () => { active = false }
+  }, [])
 
   function updateField(field: keyof typeof values, value: string) {
     setValues((current) => ({ ...current, [field]: value }))
@@ -69,14 +81,27 @@ function AddWordForm({ language, onCancel, onSave }: AddWordFormProps) {
     if (!file) return
     setImageError('')
     setIsProcessingImage(true)
-    try { setImage(await compressImage(file)) }
-    catch { setImageError(copy.photoReadError) }
+    try {
+      const compressedImage = await compressImage(file)
+      try { await saveImage(draftImageId, compressedImage) }
+      catch {
+        setImageError(copy.photoStorageError)
+        return
+      }
+      imageChangedRef.current = true
+      setImage(compressedImage)
+    } catch { setImageError(copy.photoReadError) }
     finally { setIsProcessingImage(false) }
   }
 
-  function removeSelectedImage() {
+  async function removeSelectedImage() {
+    imageChangedRef.current = true
     setImage(undefined)
     setImageError('')
+    setIsProcessingImage(true)
+    try { await deleteImage(draftImageId) }
+    catch { setImageError(copy.photoStorageError) }
+    finally { setIsProcessingImage(false) }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -98,7 +123,7 @@ function AddWordForm({ language, onCancel, onSave }: AddWordFormProps) {
   }
 
   return <main className="form-page">
-    <button className="back-button" type="button" onClick={onCancel}><span aria-hidden="true">←</span>{copy.back}</button>
+    <button className="back-button" type="button" onClick={onBack}><span aria-hidden="true">←</span>{copy.back}</button>
     <section className="form-intro"><p className="section-heading__kicker">{copy.newCard}</p><h1>{copy.formTitle}</h1><p>{copy.formSubtitle}</p></section>
     <form className="word-form" onSubmit={handleSubmit} noValidate>
       <label className="form-field"><span>{copy.hanziLabel}<b aria-hidden="true">*</b></span><input lang="zh" value={values.hanzi} onChange={(event) => updateField('hanzi', event.target.value)} placeholder={copy.hanziPlaceholder} aria-invalid={Boolean(errors.hanzi)} aria-describedby={errors.hanzi ? 'hanzi-error' : undefined}/>{errors.hanzi && <small id="hanzi-error" className="field-error">{errors.hanzi}</small>}</label>
@@ -116,10 +141,22 @@ function AddWordForm({ language, onCancel, onSave }: AddWordFormProps) {
 
 function App() {
   const [language, setLanguage] = useState<Language>('ru')
-  const [screen, setScreen] = useState<'home' | 'add'>('home')
+  const [screen, setScreen] = useState<AppScreen>(loadScreen)
   const [storedWords, setStoredWords] = useState<StoredWord[]>(loadWords)
   const copy = translations[language]
   const totalWords = demoWords.length + storedWords.length
+
+  function navigateTo(nextScreen: AppScreen) {
+    saveScreen(nextScreen)
+    setScreen(nextScreen)
+  }
+
+  async function cancelDraft() {
+    clearDraft()
+    try { await deleteImage(draftImageId) }
+    catch { /* Draft cleanup is best effort. */ }
+    navigateTo('home')
+  }
 
   async function addWord(word: StoredWord, image?: Blob): Promise<SaveResult> {
     let imageId: string | undefined
@@ -135,15 +172,18 @@ function App() {
       return 'word-error'
     }
     setStoredWords(nextWords)
-    setScreen('home')
+    clearDraft()
+    try { await deleteImage(draftImageId) }
+    catch { /* The saved card no longer depends on the draft image. */ }
+    navigateTo('home')
     window.scrollTo({ top: 0, behavior: 'smooth' })
     return 'success'
   }
 
   return <div className="app-shell">
-    <header className="app-header"><button className="brand" type="button" onClick={() => setScreen('home')} aria-label="Hanzi Cards"><span className="brand__mark" lang="zh">字</span><span className="brand__name">Hanzi Cards</span></button><div className="language-switcher" aria-label={copy.languageLabel}>{languages.map((item) => <button className={item === language ? 'is-active' : ''} key={item} type="button" aria-pressed={item === language} onClick={() => setLanguage(item)}>{item.toUpperCase()}</button>)}</div></header>
-    {screen === 'add' ? <AddWordForm language={language} onCancel={() => setScreen('home')} onSave={addWord}/> : <main id="top">
-      <section className="hero-section"><div className="eyebrow"><span className="eyebrow__dot" />{copy.eyebrow}</div><h1>{copy.greeting}</h1><p className="hero-section__subtitle">{copy.subtitle}</p><div className="dictionary-count"><span className="dictionary-count__icon"><BookIcon /></span><span><strong>{totalWords}</strong>{copy.wordsCount}</span></div><div className="actions"><button className="button button--primary" type="button">{copy.review}<ArrowIcon /></button><button className="button button--secondary" type="button" onClick={() => setScreen('add')}><span aria-hidden="true">＋</span>{copy.addWord}</button></div></section>
+    <header className="app-header"><button className="brand" type="button" onClick={() => navigateTo('home')} aria-label="Hanzi Cards"><span className="brand__mark" lang="zh">字</span><span className="brand__name">Hanzi Cards</span></button><div className="language-switcher" aria-label={copy.languageLabel}>{languages.map((item) => <button className={item === language ? 'is-active' : ''} key={item} type="button" aria-pressed={item === language} onClick={() => setLanguage(item)}>{item.toUpperCase()}</button>)}</div></header>
+    {screen === 'add' ? <AddWordForm language={language} onBack={() => navigateTo('home')} onCancel={cancelDraft} onSave={addWord}/> : <main id="top">
+      <section className="hero-section"><div className="eyebrow"><span className="eyebrow__dot" />{copy.eyebrow}</div><h1>{copy.greeting}</h1><p className="hero-section__subtitle">{copy.subtitle}</p><div className="dictionary-count"><span className="dictionary-count__icon"><BookIcon /></span><span><strong>{totalWords}</strong>{copy.wordsCount}</span></div><div className="actions"><button className="button button--primary" type="button">{copy.review}<ArrowIcon /></button><button className="button button--secondary" type="button" onClick={() => navigateTo('add')}><span aria-hidden="true">＋</span>{copy.addWord}</button></div></section>
       <section className="words-section" aria-labelledby="words-heading"><div className="section-heading"><div><p className="section-heading__kicker">{copy.collection}</p><h2 id="words-heading">{copy.recentWords}</h2></div><span className="section-heading__count">{totalWords}</span></div><div className="word-grid">{demoWords.map((word) => <WordCard key={word.hanzi} {...word} translation={word.translations[language]}/>)}{storedWords.map((word) => <WordCard key={word.id} {...word} translation={word.translation}/>)}</div></section>
     </main>}
     <footer><span lang="zh">每天进步一点点</span><span>{copy.footer}</span></footer>
